@@ -42,7 +42,8 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
   }
   defer conn.Close(context.Background())
   firebaseCtx := context.Background()
-  firebaseApp, err := firebase.NewApp(firebaseCtx, nil)
+  firebaseConfig := &firebase.Config{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")}
+  firebaseApp, err := firebase.NewApp(firebaseCtx, firebaseConfig)
   if err != nil {
     http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
     log.Panicf("Error while initializing a firebase: %v\n", err)
@@ -51,7 +52,7 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
   messagingClient, err := firebaseApp.Messaging(firebaseCtx)
   if err != nil {
     http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-    log.Fatalf("Error while getting messaging client: %v\n", err)
+    log.Panicf("Error while getting messaging client: %v\n", err)
     return
   }
   
@@ -102,9 +103,10 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
   var message string
   var corporateId string
   var title string
+  count := 0
   _, err = pgx.ForEachRow(rows, []any{&tokens, &message, &corporateId, &title}, func() error {
-    for _, partiion := range splitIntoBatches(tokens.Elements, 500) {
-      message := &messaging.MulticastMessage{
+    for _, partition := range splitIntoBatches(tokens.Elements, 500) {
+      notification := &messaging.MulticastMessage{
         Notification: &messaging.Notification{
           Title: title,
           Body: message,
@@ -112,17 +114,19 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
         Data: map[string]string{
           corporateId: corporateId,
         },
-        Tokens: partiion,
+        Tokens: partition,
       }
-      _, err = messagingClient.SendEachForMulticast(context.Background(), message)
+      _, err = messagingClient.SendEachForMulticast(context.Background(), notification)
       if err != nil {
-        log.Printf("Error while running query: %v\n", err)
+        log.Panicf("Error while running query: %v\n", err)
+      } else {
+        count += len(partition)
       }
     }
     return nil
   })
   if err != nil {
-    log.Printf("Error while iterating rows")
+    log.Panicf("Error while iterating rows")
   }
-  fmt.Fprintf(w, "success\n")
+  fmt.Fprintf(w, "success: (count %v)\n", count)
 }
