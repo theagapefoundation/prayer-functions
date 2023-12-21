@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	_ "crosswand.com/prayer-reminder"
+	_ "theagapefoundation.org/group-corporate-prayer-reminder"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )

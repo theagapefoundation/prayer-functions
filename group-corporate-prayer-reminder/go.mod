@@ -1,4 +1,4 @@
-module crosswand.com/prayer-reminder
+module theagapefoundation.org/group-corporate-prayer-reminder
 
 go 1.21.4
 
