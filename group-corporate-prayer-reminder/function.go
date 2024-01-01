@@ -58,18 +58,20 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
   
   rows, err := conn.Query(context.Background(), `
     SELECT ARRAY_AGG(user_fcm_tokens.value), reminders.value, corporate_prayers.id, corporate_prayers.title
-    FROM user_fcm_tokens
-    INNER JOIN prayers ON prayers.user_id = user_fcm_tokens.user_id
-    INNER JOIN corporate_prayers ON corporate_prayers.id = prayers.corporate_id
+    FROM notification_corporate_settings
+    INNER JOIN corporate_prayers ON corporate_prayers.id = notification_corporate_settings.corporate_id
     INNER JOIN reminders ON reminders.id = corporate_prayers.reminder_id
+    INNER JOIN user_fcm_tokens ON notification_corporate_settings.user_id = user_fcm_tokens.user_id
     WHERE (
-      corporate_prayers.started_at IS NULL
-      OR DATE_TRUNC(
-        'day', 
-        NOW() AT TIME ZONE 'UTC' 
-        + INTERVAL '1 hour' * EXTRACT(TIMEZONE_HOUR FROM reminders.time)
-        + INTERVAL '1 minute' * EXTRACT(TIMEZONE_MINUTE FROM reminders.time)
-      ) >= DATE_TRUNC('day', corporate_prayers.started_at)
+      (
+        corporate_prayers.started_at IS NULL
+        OR DATE_TRUNC(
+          'day', 
+          NOW() AT TIME ZONE 'UTC' 
+          + INTERVAL '1 hour' * EXTRACT(TIMEZONE_HOUR FROM reminders.time)
+          + INTERVAL '1 minute' * EXTRACT(TIMEZONE_MINUTE FROM reminders.time)
+        ) >= DATE_TRUNC('day', corporate_prayers.started_at)
+      )
     ) AND (
       corporate_prayers.ended_at IS NULL
       OR DATE_TRUNC(
@@ -79,19 +81,19 @@ func notifyUserPrayerReminders(w http.ResponseWriter, r *http.Request) {
         + INTERVAL '1 minute' * EXTRACT(TIMEZONE_MINUTE FROM reminders.time)
       ) <= DATE_TRUNC('day', corporate_prayers.ended_at)
     ) AND POSITION(
-      EXTRACT(DOW FROM DATE_TRUNC(
-          'day', 
+      EXTRACT(DOW FROM 
           NOW() AT TIME ZONE 'UTC' 
           + INTERVAL '1 hour' * EXTRACT(TIMEZONE_HOUR FROM reminders.time)
           + INTERVAL '1 minute' * EXTRACT(TIMEZONE_MINUTE FROM reminders.time)
-      ))::text in reminders.days
+      )::text in reminders.days
     ) > 0 AND 
     DATE_TRUNC('minute', reminders.time::time) = DATE_TRUNC(
       'minute', 
       (NOW() AT TIME ZONE 'UTC' 
       + INTERVAL '1 hour' * EXTRACT(TIMEZONE_HOUR FROM reminders.time)
       + INTERVAL '1 minute' * EXTRACT(TIMEZONE_MINUTE FROM reminders.time))::time
-    )
+    ) AND
+    notification_corporate_settings.on_reminder IS TRUE
     GROUP BY reminders.id, corporate_prayers.id
   `)
   if err != nil {
